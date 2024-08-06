@@ -18,10 +18,16 @@ int numberOfCharInString(String source, char search)
     }
     return count;
 }
+long intFrom16BaseString(String sourceString)
+{
+    return strtol(sourceString.c_str(), NULL, 16);
+}
 
-JsonStreamScanner::JsonStreamScanner(Stream *stream)
+JsonStreamScanner::JsonStreamScanner(Stream *stream, boolean chunked)
 {
     _stream = stream;
+    _chunked = chunked;
+    _chunkSize = -1;
 }
 
 // Scan stream until ", and return path if it is key
@@ -29,7 +35,31 @@ String JsonStreamScanner::scanNextKey()
 {
     while (_stream->available())
     {
+        if (_chunked && _chunkSize < 0)
+        {
+            _chunkSize = intFrom16BaseString(_stream->readStringUntil('\n'));
+                log_e("Chunk: %d", _chunkSize);
+        }
+
         String word = _stream->readStringUntil('\"');
+
+        if (_chunked)
+        {
+            _chunkSize -= (word.length() + 1);
+            if (_chunkSize <= 0) {
+                long startLocation =  (0 - _chunkSize) + 2;
+                long endLocation = word.indexOf("\r\n", startLocation);
+                String part1 = word.substring(0, startLocation - 1);
+                String chunkSizeString = word.substring(startLocation, endLocation);
+                String part2 = word.substring(endLocation + 2);
+                _chunkSize = intFrom16BaseString(chunkSizeString);
+                log_e("Chunk: %s = %d", chunkSizeString.c_str(), _chunkSize);
+                if (_chunkSize == 0) break;
+                _chunkSize -= (part2.length() + 1);
+                word = part1 + part2;
+            }
+        }
+
         int numberOfClose = numberOfCharInString(word, '}');
         int numberOfOpen = numberOfCharInString(word, '{');
         word.trim();

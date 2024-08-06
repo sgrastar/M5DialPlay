@@ -83,11 +83,14 @@ int SPClient::requestAccessToken(String code)
 
     httpClient.begin(authtokenURL, SpotifyPEM);
     httpClient.addHeader("Content-Type", "application/x-www-form-urlencoded");
+    const char *headerKeys[] = {"Transfer-Encoding"};
+    httpClient.collectHeaders(headerKeys, 1);
     int result = httpClient.POST(payload);
     if (result == HTTP_CODE_OK)
     {
+        boolean chunked = (httpClient.header("Transfer-Encoding") == "chunked");
         WiFiClient *stream = httpClient.getStreamPtr();
-        JsonStreamScanner scanner = JsonStreamScanner(stream);
+        JsonStreamScanner scanner = JsonStreamScanner(stream, chunked);
         while (scanner.available())
         {
             String path = scanner.scanNextKey();
@@ -124,12 +127,15 @@ int SPClient::refreshAccessToken()
 
     httpClient.begin(authtokenURL, SpotifyPEM);
     httpClient.addHeader("Content-Type", "application/x-www-form-urlencoded");
+    const char *headerKeys[] = {"Transfer-Encoding"};
+    httpClient.collectHeaders(headerKeys, 1);
     int result = httpClient.POST(payload);
     if (result == HTTP_CODE_OK)
     {
+        boolean chunked = (httpClient.header("Transfer-Encoding") == "chunked");
         accessToken = "";
         WiFiClient *stream = httpClient.getStreamPtr();
-        JsonStreamScanner scanner = JsonStreamScanner(stream);
+        JsonStreamScanner scanner = JsonStreamScanner(stream, chunked);
         while (scanner.available())
         {
             String path = scanner.scanNextKey();
@@ -164,11 +170,14 @@ int SPClient::getPlaybackState()
         return 0;
     httpClient.begin("https://api.spotify.com/v1/me/player", SpotifyPEM);
     httpClient.addHeader("Authorization", "Bearer " + accessToken);
+    const char *headerKeys[] = {"Transfer-Encoding"};
+    httpClient.collectHeaders(headerKeys, 1);
     int result = httpClient.GET();
     if (result == HTTP_CODE_OK)
     {
+        boolean chunked = (httpClient.header("Transfer-Encoding") == "chunked");
         WiFiClient *stream = httpClient.getStreamPtr();
-        JsonStreamScanner scanner = JsonStreamScanner(stream);
+        JsonStreamScanner scanner = JsonStreamScanner(stream, chunked);
         while (scanner.available())
         {
             String path = scanner.scanNextKey();
@@ -224,12 +233,14 @@ int SPClient::getDeviceList()
 
     httpClient.begin("https://api.spotify.com/v1/me/player/devices", SpotifyPEM);
     httpClient.addHeader("Authorization", "Bearer " + accessToken);
+    const char *headerKeys[] = {"Transfer-Encoding"};
+    httpClient.collectHeaders(headerKeys, 1);
     int result = httpClient.GET();
     if (result == HTTP_CODE_OK)
     {
+        boolean chunked = (httpClient.header("Transfer-Encoding") == "chunked");
         WiFiClient *stream = httpClient.getStreamPtr();
-
-        JsonStreamScanner scanner = JsonStreamScanner(stream);
+        JsonStreamScanner scanner = JsonStreamScanner(stream, chunked);
         while (scanner.available())
         {
             String path = scanner.scanNextKey();
