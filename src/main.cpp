@@ -55,6 +55,23 @@ M5GFX Display;
 #define qrcodeWidth 160
 #define baseColor 0xFB40
 
+// スクロールテキスト用の変数
+LGFX_Sprite trackNameSprite(&Display);
+LGFX_Sprite artistNameSprite(&Display);
+size_t trackNamePos = 0;
+size_t artistNamePos = 20;
+int32_t trackNameCursorX = 0;
+int32_t artistNameCursorX = 20;
+unsigned long lastScrollTime = 0;
+const int scrollDelay = 50;  // スクロール速度（ms）
+const int textPause = 1000;  // 端までスクロールした後の待機時間（ms）
+bool isTrackScrolling = false;
+bool isArtistScrolling = false;
+unsigned long trackPauseTime = 0;
+unsigned long artistPauseTime = 0;
+String previousTrackName = "";
+String previousArtistName = "";
+
 // Spotify variables
 SPClient spClient;
 int tempVolume = 0;
@@ -79,6 +96,7 @@ void showPlayScreen();
 void redrawPlayScreen();
 void showDeviceScreen();
 void redrawDeviceScreen(int selectedLine);
+void updateScrollingText();
 
 void handleFormWiFi(void);
 void handlePostWiFi(void);
@@ -88,6 +106,72 @@ void handleNotFound(void);
 
 void showMessage(String message);
 
+// スクロールテキストの更新処理
+void updateScrollingText() {
+  static unsigned long lastUpdate = 0;
+  if (millis() - lastUpdate < scrollDelay) {
+    return;  // 更新間隔が短すぎる場合はスキップ
+  }
+  lastUpdate = millis();
+
+  // 曲が変わったかチェック
+  if (previousTrackName != spClient.trackName) {
+    trackNameCursorX = 0;  // カーソル位置をリセット
+    isTrackScrolling = false;
+    previousTrackName = spClient.trackName;
+  }
+
+  // アーティストが変わったかチェック
+  if (previousArtistName != spClient.artistName) {
+    artistNameCursorX = 20;  // カーソル位置をリセット
+    isArtistScrolling = false;
+    previousArtistName = spClient.artistName;
+  }
+
+  bool needUpdate = false;  // スクロールが必要か判定
+
+  // Track nameのスクロール処理
+  int16_t trackWidth = trackNameSprite.textWidth(spClient.trackName);
+  if (trackWidth > 200) {  // スプライトの幅より大きい場合のみスクロール
+    needUpdate = true;
+
+    if (!isTrackScrolling && millis() - trackPauseTime > textPause) {
+      isTrackScrolling = true;
+    }
+    
+    if (isTrackScrolling) {
+      trackNameCursorX--;
+      if (trackNameCursorX < -trackWidth) {
+        trackNameCursorX = 200;  // スプライトの幅
+        isTrackScrolling = false;
+        trackPauseTime = millis();
+      }
+    }
+  }
+
+  // Artist nameのスクロール処理
+  int16_t artistWidth = artistNameSprite.textWidth(spClient.artistName);
+  if (artistWidth > 200) {  // スプライトの幅より大きい場合のみスクロール
+    needUpdate = true;
+    if (!isArtistScrolling && millis() - artistPauseTime > textPause) {
+      isArtistScrolling = true;
+    }
+    
+    if (isArtistScrolling) {
+      artistNameCursorX--;
+      if (artistNameCursorX < -artistWidth) {
+        artistNameCursorX = 200;  // スプライトの幅
+        isArtistScrolling = false;
+        artistPauseTime = millis();
+      }
+    }
+  }
+
+  if (needUpdate) {
+    redrawPlayScreen();
+  }
+}
+
 // Setup M5Dial
 void setup()
 {
@@ -95,6 +179,17 @@ void setup()
   M5Dial.begin(cfg, true, false);
   Display.begin();
   M5Dial.update();
+
+  // スプライトの初期化
+  trackNameSprite.setColorDepth(8);
+  trackNameSprite.setFont(&fonts::lgfxJapanGothic_20);
+  trackNameSprite.setTextWrap(false);
+  trackNameSprite.createSprite(200, 25);  // 適切なサイズに調整
+
+  artistNameSprite.setColorDepth(8);
+  artistNameSprite.setFont(&fonts::lgfxJapanGothic_20);
+  artistNameSprite.setTextWrap(false);
+  artistNameSprite.createSprite(200, 25);  // 適切なサイズに調整
 
   oldPosition = M5Dial.Encoder.read();
 
@@ -201,7 +296,6 @@ void loop()
       showDeviceScreen();
       return;
     }
-
     // Dial
     if (spClient.supportsVolume)
     {
@@ -281,6 +375,8 @@ void loop()
         }
       }
     }
+    updateScrollingText();  // スクロール更新
+    //redrawPlayScreen();     // 画面更新
     return;
   }
   case StateDeviceList:
@@ -446,6 +542,13 @@ void showPlayScreen()
   int result = spClient.getPlaybackState();
   screenState = StatePlay;
   tempVolume = spClient.volume;
+
+  // スクロール位置をリセット
+  trackNameCursorX = 0;
+  artistNameCursorX = 20;
+  isTrackScrolling = false;
+  isArtistScrolling = false;
+
   if (spClient.duration_ms > 0)
   {
     refreshMillis = millis() + (spClient.duration_ms - spClient.progress_ms) + 100;
@@ -454,13 +557,31 @@ void showPlayScreen()
   {
     refreshMillis = 0;
   }
+  Display.clear();  // 画面遷移時は全画面クリア
   redrawPlayScreen();
 }
 
 // Redraw player screen components
 void redrawPlayScreen()
 {
-  Display.clear();
+
+  static bool lastPlayState = !spClient.isPlaying;  // 前回の再生状態
+  static int lastVolume = -1;  // 前回のボリューム
+
+  // 再生状態やボリュームが変化した場合は全画面クリア
+  if (lastPlayState != spClient.isPlaying || lastVolume != spClient.volume)
+  {
+    Display.clear();
+    lastPlayState = spClient.isPlaying;
+    lastVolume = spClient.volume;
+  }
+  else
+  {
+    // スクロールテキストの領域のみクリア
+    Display.fillRect(20, 154, 200, 50, BLACK);
+  }
+  //Display.clear();
+  //Display.fillRect(20, 154, 200, 50, BLACK);  // track nameとartist nameの領域のみクリア
   Display.setColor(baseColor);
 
   // Volume
@@ -486,8 +607,19 @@ void redrawPlayScreen()
   Display.fillRect(34, 80, 8, 50);
 
   // Title
-  Display.drawString(spClient.trackName, screenWidth / 2, 154);
-  Display.drawString(spClient.artistName, screenWidth / 2, 179);
+  //Display.drawString(spClient.trackName, screenWidth / 2, 154);
+  //Display.drawString(spClient.artistName, screenWidth / 2, 179);
+  // Track name スプライトの更新と描画
+  trackNameSprite.clear();
+  trackNameSprite.setCursor(trackNameCursorX, 0);
+  trackNameSprite.print(spClient.trackName);
+  trackNameSprite.pushSprite(&Display, 20, 154);
+
+  // Artist name スプライトの更新と描画
+  artistNameSprite.clear();
+  artistNameSprite.setCursor(artistNameCursorX, 0);
+  artistNameSprite.print(spClient.artistName);
+  artistNameSprite.pushSprite(&Display, 20, 179);
 }
 
 // Show device list screen
@@ -534,6 +666,8 @@ void redrawDeviceScreen(int selectedLine)
     }
   }
 }
+
+
 
 // Send WiFi setting form
 void handleFormWiFi(void)
