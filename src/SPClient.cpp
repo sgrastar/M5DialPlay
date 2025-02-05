@@ -160,6 +160,7 @@ int SPClient::getPlaybackState()
     deviceID = "";
     artistName = "";
     trackName = "";
+    imageURL = "";
     duration_ms = 0;
     progress_ms = 0;
     volume = 0;
@@ -203,7 +204,13 @@ int SPClient::getPlaybackState()
             }
             else if (path == "/item/artists/name")
             {
-                artistName = scanner.scanString();
+                //artistName = scanner.scanString();
+                String currentArtist = scanner.scanString();
+                if (artistName.length() > 0) {
+                    artistName += ", " + currentArtist;
+                } else {
+                    artistName = currentArtist;
+                }
             }
             else if (path == "/item/duration_ms")
             {
@@ -212,6 +219,10 @@ int SPClient::getPlaybackState()
             else if (path == "/item/name")
             {
                 trackName = scanner.scanString();
+            }
+            else if (path == "/item/album/images/url")
+            {
+                imageURL = scanner.scanString();
             }
         }
     }

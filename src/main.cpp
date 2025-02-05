@@ -54,14 +54,16 @@ M5GFX Display;
 #define screenHeight 240
 #define qrcodeWidth 160
 #define baseColor 0xFB40
+bool needFullClear = true;
 
 // スクロールテキスト用の変数
+LGFX_Sprite albumArtSprite(&Display);  // アルバムアート用スプライト
 LGFX_Sprite trackNameSprite(&Display);
 LGFX_Sprite artistNameSprite(&Display);
 size_t trackNamePos = 0;
-size_t artistNamePos = 20;
+size_t artistNamePos = 0;
 int32_t trackNameCursorX = 0;
-int32_t artistNameCursorX = 20;
+int32_t artistNameCursorX = 0;
 unsigned long lastScrollTime = 0;
 const int scrollDelay = 50;  // スクロール速度（ms）
 const int textPause = 1000;  // 端までスクロールした後の待機時間（ms）
@@ -69,6 +71,7 @@ bool isTrackScrolling = false;
 bool isArtistScrolling = false;
 unsigned long trackPauseTime = 0;
 unsigned long artistPauseTime = 0;
+String currentImageURL = "";  // 現在表示中の画像URL
 String previousTrackName = "";
 String previousArtistName = "";
 
@@ -123,7 +126,7 @@ void updateScrollingText() {
 
   // アーティストが変わったかチェック
   if (previousArtistName != spClient.artistName) {
-    artistNameCursorX = 20;  // カーソル位置をリセット
+    artistNameCursorX = 0;  // カーソル位置をリセット
     isArtistScrolling = false;
     previousArtistName = spClient.artistName;
   }
@@ -132,7 +135,7 @@ void updateScrollingText() {
 
   // Track nameのスクロール処理
   int16_t trackWidth = trackNameSprite.textWidth(spClient.trackName);
-  if (trackWidth > 200) {  // スプライトの幅より大きい場合のみスクロール
+  if (trackWidth > 100) {  // スプライトの幅より大きい場合のみスクロール
     needUpdate = true;
 
     if (!isTrackScrolling && millis() - trackPauseTime > textPause) {
@@ -142,7 +145,7 @@ void updateScrollingText() {
     if (isTrackScrolling) {
       trackNameCursorX--;
       if (trackNameCursorX < -trackWidth) {
-        trackNameCursorX = 200;  // スプライトの幅
+        trackNameCursorX = 100;  // スプライトの幅
         isTrackScrolling = false;
         trackPauseTime = millis();
       }
@@ -151,7 +154,7 @@ void updateScrollingText() {
 
   // Artist nameのスクロール処理
   int16_t artistWidth = artistNameSprite.textWidth(spClient.artistName);
-  if (artistWidth > 200) {  // スプライトの幅より大きい場合のみスクロール
+  if (artistWidth > 100) {  // スプライトの幅より大きい場合のみスクロール
     needUpdate = true;
     if (!isArtistScrolling && millis() - artistPauseTime > textPause) {
       isArtistScrolling = true;
@@ -160,7 +163,7 @@ void updateScrollingText() {
     if (isArtistScrolling) {
       artistNameCursorX--;
       if (artistNameCursorX < -artistWidth) {
-        artistNameCursorX = 200;  // スプライトの幅
+        artistNameCursorX = 100;  // スプライトの幅
         isArtistScrolling = false;
         artistPauseTime = millis();
       }
@@ -175,21 +178,29 @@ void updateScrollingText() {
 // Setup M5Dial
 void setup()
 {
+  //Serial.begin(115200);  // この行を追加
+  //delay(1000);      
+  
   auto cfg = M5.config();
   M5Dial.begin(cfg, true, false);
   Display.begin();
   M5Dial.update();
 
   // スプライトの初期化
+  albumArtSprite.setColorDepth(16);    
+  albumArtSprite.createSprite(50, 50);
+  //albumArtSprite.fillScreen(BLACK);     // 背景を黒で初期化
+  //albumArtSprite.setTextColor(TFT_WHITE, TFT_BLACK);
+
   trackNameSprite.setColorDepth(8);
   trackNameSprite.setFont(&fonts::lgfxJapanGothic_20);
   trackNameSprite.setTextWrap(false);
-  trackNameSprite.createSprite(200, 25);  // 適切なサイズに調整
+  trackNameSprite.createSprite(110, 25);  // 適切なサイズに調整
 
   artistNameSprite.setColorDepth(8);
   artistNameSprite.setFont(&fonts::lgfxJapanGothic_20);
   artistNameSprite.setTextWrap(false);
-  artistNameSprite.createSprite(200, 25);  // 適切なサイズに調整
+  artistNameSprite.createSprite(110, 25);  // 適切なサイズに調整
 
   oldPosition = M5Dial.Encoder.read();
 
@@ -232,6 +243,7 @@ void setup()
       preferences.putString("refreshToken", spClient.refreshToken);
       preferences.end();
       delay(100);
+      needFullClear = true;
       showPlayScreen();
       if (spClient.trackName.isEmpty())
       {
@@ -323,6 +335,7 @@ void loop()
           M5Dial.Speaker.tone(8000, 20);
           spClient.changeVolume(tempVolume);
           delay(100);
+          needFullClear = true;
           showPlayScreen();
           return;
         }
@@ -333,6 +346,7 @@ void loop()
     if (refreshMillis != 0 && refreshMillis < millis())
     {
       refreshMillis = 0;
+      needFullClear = true;
       showPlayScreen();
       return;
     }
@@ -342,7 +356,8 @@ void loop()
     if (touchDetail.state == m5::touch_state_t::touch_end)
     {
       // Play or Pause
-      if (touchDetail.y > 75 && touchDetail.y < (75 + 60))
+      //if (touchDetail.y > 75 && touchDetail.y < (75 + 60))
+      if (touchDetail.y > 65 && touchDetail.y < (65 + 60))
       {
         if (touchDetail.x > 95 && touchDetail.x < (screenWidth - 95))
         {
@@ -364,6 +379,7 @@ void loop()
           M5Dial.Speaker.tone(8000, 20);
           spClient.skipToPrev();
           delay(100);
+          needFullClear = false;
           showPlayScreen();
         }
         else if (touchDetail.x > (75 + 60))
@@ -371,6 +387,7 @@ void loop()
           M5Dial.Speaker.tone(8000, 20);
           spClient.skipToNext();
           delay(100);
+          needFullClear = false;
           showPlayScreen();
         }
       }
@@ -394,6 +411,7 @@ void loop()
           delay(100);
         }
       }
+      needFullClear = true;
       showPlayScreen();
       return;
     }
@@ -536,16 +554,88 @@ void showAuthQRcode()
   M5Dial.Speaker.tone(8000, 20);
 }
 
+void downloadAndDisplayAlbumArt() {
+  //log_e("--- Start downloadAndDisplayAlbumArt ---");
+  //log_e("Current URL: %s", currentImageURL.c_str());
+  //log_e("New URL: %s", spClient.imageURL.c_str());
+
+  if (currentImageURL == spClient.imageURL) {
+    //log_e("Same image URL, skipping download");
+    return;
+  }
+
+  if (spClient.imageURL.isEmpty()) {
+    //log_e("Image URL is empty, clearing sprite");
+    albumArtSprite.fillScreen(BLACK);
+    currentImageURL = "";
+    return;
+  }
+
+  currentImageURL = spClient.imageURL;
+  //log_e("Starting HTTP request...");
+
+  HTTPClient http;
+  http.setTimeout(10000);  // タイムアウトを10秒に設定
+  http.begin(spClient.imageURL);
+  
+  // User-Agentヘッダーを追加
+  http.addHeader("User-Agent", "ESP32/M5Dial");
+  
+  int httpCode = http.GET();
+  //log_e("HTTP response code: %d", httpCode);
+
+  if (httpCode == HTTP_CODE_OK) {
+    WiFiClient *stream = http.getStreamPtr();
+    size_t size = http.getSize();
+    //log_e("Image size: %d bytes", size);
+    
+    if (size > 0) {
+      //log_e("Drawing image to sprite...");
+      albumArtSprite.fillScreen(BLACK);  // スプライトをクリア
+
+      // 画像データをメモリにバッファ
+      uint8_t *buffer = (uint8_t *)malloc(size);
+      if (buffer) {
+        size_t bytesRead = stream->readBytes(buffer, size);
+        //log_e("Bytes read to buffer: %d", bytesRead);
+        
+        // バッファからスプライトに描画
+        bool success = albumArtSprite.drawJpg(buffer, bytesRead);
+        //log_e("Draw result: %s", success ? "success" : "failed");
+        free(buffer);
+      } else {
+        //log_e("Failed to allocate buffer");
+      }
+      
+      //log_e("Sprite properties - width: %d, height: %d, colorDepth: %d", 
+      //     albumArtSprite.width(), 
+      //     albumArtSprite.height(),
+      //     albumArtSprite.getColorDepth());
+    } else {
+      //log_e("Image size is 0");
+    }
+  } else {
+    //log_e("HTTP GET failed, error: %s", http.errorToString(httpCode).c_str());
+  }
+  http.end();
+  //log_e("--- End downloadAndDisplayAlbumArt ---");
+}
+
 // Get status and show player screen
 void showPlayScreen()
 {
+  if (needFullClear) {
+      Display.clear();
+      needFullClear = false;
+  }
+
   int result = spClient.getPlaybackState();
   screenState = StatePlay;
   tempVolume = spClient.volume;
 
   // スクロール位置をリセット
   trackNameCursorX = 0;
-  artistNameCursorX = 20;
+  artistNameCursorX = 0;
   isTrackScrolling = false;
   isArtistScrolling = false;
 
@@ -557,7 +647,12 @@ void showPlayScreen()
   {
     refreshMillis = 0;
   }
-  Display.clear();  // 画面遷移時は全画面クリア
+  //Display.clear();  // 画面遷移時は全画面クリア
+
+  downloadAndDisplayAlbumArt();  // アルバムアートをダウンロード
+  previousTrackName = spClient.trackName;
+  previousArtistName = spClient.artistName;
+
   redrawPlayScreen();
 }
 
@@ -572,13 +667,15 @@ void redrawPlayScreen()
   if (lastPlayState != spClient.isPlaying || lastVolume != spClient.volume)
   {
     Display.clear();
+    //Display.fillRect(0, 0, screenWidth, 80, BLACK);
     lastPlayState = spClient.isPlaying;
     lastVolume = spClient.volume;
   }
   else
   {
     // スクロールテキストの領域のみクリア
-    Display.fillRect(20, 154, 200, 50, BLACK);
+    //Display.fillRect(20, 154, 200, 50, BLACK);
+    Display.fillRect(90, 150, 150, 50, BLACK);
   }
   //Display.clear();
   //Display.fillRect(20, 154, 200, 50, BLACK);  // track nameとartist nameの領域のみクリア
@@ -591,20 +688,23 @@ void redrawPlayScreen()
   // Pause / Play
   if (spClient.isPlaying)
   {
-    Display.fillRect(104, 75, 10, 60);
-    Display.fillRect(127, 75, 10, 60);
+    Display.fillRect(104, 65, 10, 60);
+    Display.fillRect(127, 65, 10, 60);
   }
   else
   {
-    Display.fillTriangle(98, 75, 158, 105, 98, 135);
+    Display.fillTriangle(98, 65, 158, 95, 98, 125);
   }
 
   // Skip
-  Display.fillTriangle(166, 80, 206, 105, 166, 130);
-  Display.fillRect(198, 80, 8, 50);
+  Display.fillTriangle(166, 70, 206, 95, 166, 120);
+  Display.fillRect(198, 70, 8, 50);
 
-  Display.fillTriangle(34, 105, 74, 80, 74, 130);
-  Display.fillRect(34, 80, 8, 50);
+  Display.fillTriangle(34, 95, 74, 70, 74, 120);
+  Display.fillRect(34, 70, 8, 50);
+
+  // Album art
+  albumArtSprite.pushSprite(&Display, 30, 150);  // 左端に表示
 
   // Title
   //Display.drawString(spClient.trackName, screenWidth / 2, 154);
@@ -613,13 +713,13 @@ void redrawPlayScreen()
   trackNameSprite.clear();
   trackNameSprite.setCursor(trackNameCursorX, 0);
   trackNameSprite.print(spClient.trackName);
-  trackNameSprite.pushSprite(&Display, 20, 154);
+  trackNameSprite.pushSprite(&Display, 90, 150);
 
   // Artist name スプライトの更新と描画
   artistNameSprite.clear();
   artistNameSprite.setCursor(artistNameCursorX, 0);
   artistNameSprite.print(spClient.artistName);
-  artistNameSprite.pushSprite(&Display, 20, 179);
+  artistNameSprite.pushSprite(&Display, 90, 180);
 }
 
 // Show device list screen
@@ -721,6 +821,7 @@ void handleAuthRedirected(void)
   preferences.putString("refreshToken", spClient.refreshToken);
   preferences.end();
 
+  needFullClear = true;
   showPlayScreen();
   if (spClient.trackName.isEmpty())
   {

@@ -26,6 +26,7 @@ public:
   boolean isPlaying;
   String trackName;
   String artistName;
+  String imageURL;
   boolean supportsVolume;
   int volume;
   long progress_ms;
