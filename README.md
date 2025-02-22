@@ -1,4 +1,4 @@
-# M5DialSpotify
+# M5DialPlay
 
 A Spotify Remote Controller using M5Dial
 
