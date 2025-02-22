@@ -2,7 +2,7 @@
 
 <img src="https://github.com/user-attachments/assets/9fb8d673-4be0-4fc7-b8dd-b5233e985ce2" height="600px">
 
-A Spotify Remote Controller using M5Dial
+A Spotify Remote Controller using [M5Dial](https://docs.m5stack.com/en/core/M5Dial)
 
 ## Overview
 This repository is a derivative of [@k-natori's DialPlay](https://github.com/k-natori/DialPlay).
