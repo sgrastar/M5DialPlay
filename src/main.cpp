@@ -21,10 +21,27 @@ typedef enum
   StateAuthQRcode = 3,
   StateWaitAuth = 4,
   StatePlay = 5,
-  StateDeviceList = 6
+  StateMenu = 6,          // New state for menu screen
+  StateDeviceList = 7,    // Updated index
+  StatePlaylistList = 8   // New state for playlist selection
 } ScreenState;
 
+// Define menu items
+typedef enum
+{
+  MenuBack = 0,
+  MenuPlaylists = 1,
+  MenuDevices = 2,
+  MenuItemCount
+} MenuItem;
+
 ScreenState screenState;
+
+// Menu items
+String menuItems[MenuItemCount] = {"<< Back", "Select Playlist", "Select Device"};
+int selectedMenuItem = 0;
+int selectedPlaylistIndex = -1;
+String selectedPlaylistId = "";
 
 // WiFi variables
 IPAddress myIP;
@@ -60,6 +77,7 @@ bool needFullClear = true;
 LGFX_Sprite albumArtSprite(&Display);  // アルバムアート用スプライト
 LGFX_Sprite trackNameSprite(&Display);
 LGFX_Sprite artistNameSprite(&Display);
+LGFX_Sprite playlistImageSprite(&Display);  // プレイリストイメージ用スプライト
 size_t trackNamePos = 0;
 size_t artistNamePos = 0;
 int32_t trackNameCursorX = 0;
@@ -72,6 +90,7 @@ bool isArtistScrolling = false;
 unsigned long trackPauseTime = 0;
 unsigned long artistPauseTime = 0;
 String currentImageURL = "";  // 現在表示中の画像URL
+String currentPlaylistImageURL = "";  // 現在表示中のプレイリスト画像URL
 String previousTrackName = "";
 String previousArtistName = "";
 
@@ -97,9 +116,15 @@ void showAuthQRcode();
 
 void showPlayScreen();
 void redrawPlayScreen();
+void showMenuScreen();
+void redrawMenuScreen(int selectedLine);
 void showDeviceScreen();
 void redrawDeviceScreen(int selectedLine);
+void showPlaylistScreen();
+void redrawPlaylistScreen(int selectedLine);
 void updateScrollingText();
+void downloadAndDisplayAlbumArt();
+void downloadAndDisplayPlaylistImage(String imageURL);
 
 void handleFormWiFi(void);
 void handlePostWiFi(void);
@@ -108,6 +133,173 @@ void handleAuthRedirected(void);
 void handleNotFound(void);
 
 void showMessage(String message);
+
+// Function to show the menu screen
+void showMenuScreen() {
+  screenState = StateMenu;
+  selectedMenuItem = 0;
+  redrawMenuScreen(selectedMenuItem);
+}
+
+// Function to redraw the menu screen with the selected item
+void redrawMenuScreen(int selectedLine) {
+  Display.clear();
+  
+  Display.fillRect(0, screenHeight / 2 - 12, screenWidth, 24, baseColor);
+  
+  for (int i = 0; i < MenuItemCount; i++) {
+    int y = (i - selectedLine) * 30 + screenHeight / 2;
+    if (y > 0 && y < screenHeight) {
+      if (i == selectedLine) {
+        Display.setTextColor(BLACK);
+        Display.drawString(menuItems[i], screenWidth / 2, y);
+        Display.setTextColor(baseColor);
+      } else {
+        Display.drawString(menuItems[i], screenWidth / 2, y);
+      }
+    }
+  }
+}
+
+// Function to show playlist selection screen
+void showPlaylistScreen() {
+  screenState = StatePlaylistList;
+  Display.clear();
+  Display.drawString("Loading playlists...", screenWidth / 2, screenHeight / 2);
+
+  spClient.getUserPlaylists();
+  
+  // デフォルトで先頭の「<< Back」を選択
+  tempDeviceIndex = 0;
+  
+  // 以前に選択したプレイリストがある場合、そのインデックスを探す (1オフセット)
+  if (!selectedPlaylistId.isEmpty()) {
+    for (int i = 0; i < spClient.playlistIds.size(); i++) {
+      if (spClient.playlistIds[i] == selectedPlaylistId) {
+        tempDeviceIndex = i + 1; // +1 for Back option
+        break;
+      }
+    }
+  }
+  
+  redrawPlaylistScreen(tempDeviceIndex);
+}
+
+// Enhanced redrawPlaylistScreen with images
+void redrawPlaylistScreen(int selectedLine) {
+  Display.clear();
+  
+  // プレイリスト数 + 戻るオプション
+  int lineCount = 1 + spClient.playlistIds.size(); // +1 for Back option
+  
+  if (spClient.playlistIds.size() == 0) { // プレイリストがない場合
+    Display.drawString("No playlists found", screenWidth / 2, screenHeight / 2);
+    return;
+  }
+  
+  if (selectedLine < 0) selectedLine = 0;
+  if (selectedLine >= lineCount) selectedLine = lineCount - 1;
+  
+  // 選択エリアをハイライト
+  Display.fillRect(0, screenHeight / 2 - 12, screenWidth, 24, baseColor);
+  Display.fillRect(0, 0, screenWidth, 42, BLACK);
+  
+  // すべての行を描画
+  for (int i = 0; i < lineCount; i++) {
+    int y = (i - selectedLine) * 30 + screenHeight / 2;
+    if (y > 0 && y < screenHeight) {
+      String displayName;
+      
+      if (i == 0) {
+        displayName = "<< Back"; // 戻るオプション
+      } else {
+        // i-1で実際のプレイリストインデックスを取得
+        displayName = spClient.playlistNames[i-1];
+        
+        // 選択中のプレイリストにチェックマーク表示
+        if (spClient.playlistIds[i-1] == selectedPlaylistId) {
+          displayName = ">> " + displayName;
+        }
+      }
+      
+      if (i == selectedLine) {
+        Display.setTextColor(BLACK);
+        Display.drawString(displayName, screenWidth / 2, y);
+        Display.setTextColor(baseColor);
+      } else {
+        Display.drawString(displayName, screenWidth / 2, y);
+      }
+    }
+  }
+
+  // トラック数表示 (戻るオプション以外が選択されている場合)
+  Display.fillRect(0, 0, screenWidth, 42, BLACK);
+  if (selectedLine > 0 && (selectedLine-1) < spClient.playlistTrackCounts.size()) {
+    Display.setTextSize(1);
+    Display.drawString(String(spClient.playlistTrackCounts[selectedLine-1]) + " tracks", 
+                      screenWidth / 2, screenHeight / 2 - 94);
+  }
+  
+  // ナビゲーションヘルプの表示
+  //Display.drawString("Select: Press", screenWidth / 2, screenHeight - 20);
+}
+
+// Function to download and display playlist image
+void downloadAndDisplayPlaylistImage(String imageURL) {
+  if (currentPlaylistImageURL == imageURL) {
+      return;  // 同じ画像なら再ダウンロードしない
+  }
+  
+  if (imageURL.isEmpty()) {
+      playlistImageSprite.fillScreen(BLACK);
+      currentPlaylistImageURL = "";
+      return;
+  }
+  
+  currentPlaylistImageURL = imageURL;
+  
+  HTTPClient http;
+  http.setTimeout(10000);
+  http.begin(imageURL);
+  http.addHeader("User-Agent", "ESP32/M5Dial");
+  
+  int httpCode = http.GET();
+  
+  if (httpCode == HTTP_CODE_OK) {
+      WiFiClient *stream = http.getStreamPtr();
+      size_t size = http.getSize();
+      
+      if (size > 0) {
+          playlistImageSprite.fillScreen(BLACK);  // スプライトをクリア
+          
+          // エラーハンドリングを強化
+          uint8_t *buffer = (uint8_t *)malloc(size);
+          if (buffer) {
+              size_t bytesRead = stream->readBytes(buffer, size);
+              
+              // バッファからスプライトに描画、失敗時の処理を追加
+              if (!playlistImageSprite.drawJpg(buffer, bytesRead)) {
+                  // 画像描画失敗時はプレースホルダーを表示
+                  playlistImageSprite.fillRect(0, 0, 50, 50, baseColor);
+                  playlistImageSprite.setTextColor(BLACK);
+                  playlistImageSprite.drawString("?", 25, 25);
+              }
+              free(buffer);
+          } else {
+              // メモリ確保失敗時の処理
+              playlistImageSprite.fillRect(0, 0, 50, 50, baseColor);
+              playlistImageSprite.setTextColor(BLACK);
+              playlistImageSprite.drawString("!", 25, 25);
+          }
+      }
+  } else {
+      // HTTP要求失敗時の処理
+      playlistImageSprite.fillRect(0, 0, 50, 50, baseColor);
+      playlistImageSprite.setTextColor(BLACK);
+      playlistImageSprite.drawString("X", 25, 25);
+  }
+  http.end();
+}
 
 // スクロールテキストの更新処理
 void updateScrollingText() {
@@ -189,8 +381,10 @@ void setup()
   // スプライトの初期化
   albumArtSprite.setColorDepth(16);    
   albumArtSprite.createSprite(50, 50);
-  //albumArtSprite.fillScreen(BLACK);     // 背景を黒で初期化
-  //albumArtSprite.setTextColor(TFT_WHITE, TFT_BLACK);
+  
+  // プレイリスト画像用スプライトの初期化
+  playlistImageSprite.setColorDepth(16);
+  playlistImageSprite.createSprite(50, 50);
 
   trackNameSprite.setColorDepth(8);
   trackNameSprite.setFont(&fonts::lgfxJapanGothic_20);
@@ -236,6 +430,7 @@ void setup()
   // Preferences
   preferences.begin("DialPlay");
   spClient.refreshToken = preferences.getString("refreshToken");
+  selectedPlaylistId = preferences.getString("selPlaylist"); // 選択されたプレイリストの読み込み
   if (spClient.refreshToken.length())
   {
     if (spClient.refreshAccessToken() == 200)
@@ -305,9 +500,22 @@ void loop()
     if (M5Dial.BtnA.wasReleased())
     {
       M5Dial.Speaker.tone(8000, 20);
-      showDeviceScreen();
+      // 変更：showDeviceScreen()からshowMenuScreen()に
+      showMenuScreen();
       return;
     }
+    
+    // 長押しで即座にプレイリスト再生
+    if (M5Dial.BtnA.wasReleaseFor(1000) && !selectedPlaylistId.isEmpty())
+    {
+      M5Dial.Speaker.tone(8000, 50);
+      spClient.playPlaylist(selectedPlaylistId);
+      delay(100);
+      needFullClear = true;
+      showPlayScreen();
+      return;
+    }
+    
     // Dial
     if (spClient.supportsVolume)
     {
@@ -323,8 +531,8 @@ void loop()
           tempVolume = 100;
         oldPosition = newPosition;
         oldMillis = millis();
-        Display.fillArc(screenWidth / 2, screenHeight / 2, screenHeight / 2, screenHeight / 2 - 8, 270, (360 + 270), BLACK);
-        Display.fillArc(screenWidth / 2, screenHeight / 2, screenHeight / 2, screenHeight / 2 - 8, 270, (360 * ((float)tempVolume / 100.0f) + 270), baseColor);
+        Display.fillArc(screenWidth / 2, screenHeight / 2, screenWidth / 2, screenWidth / 2 - 8, 270, (360 + 270), BLACK);
+        Display.fillArc(screenWidth / 2, screenHeight / 2, screenWidth / 2, screenWidth / 2 - 8, 270, (360 * ((float)tempVolume / 100.0f) + 270), baseColor);
       }
 
       // Position not changed. Wait 1 second and request volume change
@@ -393,18 +601,68 @@ void loop()
       }
     }
     updateScrollingText();  // スクロール更新
-    //redrawPlayScreen();     // 画面更新
     return;
   }
+  
+  case StateMenu:
+  {
+    // ボタン押下で選択
+    if (M5Dial.BtnA.wasReleased())
+    {
+      M5Dial.Speaker.tone(8000, 20);
+      
+      switch (selectedMenuItem)
+      {
+        case MenuDevices:
+          showDeviceScreen();
+          break;
+          
+        case MenuPlaylists:
+          showPlaylistScreen();
+          break;
+          
+        case MenuBack:
+          needFullClear = true;  // 完全リフレッシュの確保
+          showPlayScreen();
+          break;
+      }
+      return;
+    }
+    
+    // ダイヤル回転でメニュー選択
+    long newPosition = M5Dial.Encoder.read();
+    if (newPosition != oldPosition && newPosition % 4 == 0)
+    {
+      selectedMenuItem += (newPosition - oldPosition) / 4;
+      if (selectedMenuItem < 0)
+        selectedMenuItem = 0;
+      if (selectedMenuItem >= MenuItemCount)
+        selectedMenuItem = MenuItemCount - 1;
+        
+      redrawMenuScreen(selectedMenuItem);
+      oldPosition = newPosition;
+    }
+    return;
+  }
+  
   case StateDeviceList:
   {
     // Toggle screen
     if (M5Dial.BtnA.wasReleased())
     {
       M5Dial.Speaker.tone(8000, 20);
-      if (tempDeviceIndex >= 0 && tempDeviceIndex < spClient.deviceIDs.size())
+      
+      if (tempDeviceIndex == 0) {
+        // 「<< Back」が選択されている場合
+        showMenuScreen();
+        return;
+      }
+      
+      // 通常のデバイス選択処理
+      int actualDeviceIndex = tempDeviceIndex - 1; // Back optionの分を調整
+      if (actualDeviceIndex >= 0 && actualDeviceIndex < spClient.deviceIDs.size())
       {
-        String selectedDeviceID = spClient.deviceIDs[tempDeviceIndex];
+        String selectedDeviceID = spClient.deviceIDs[actualDeviceIndex];
         if (selectedDeviceID != spClient.deviceID)
         {
           spClient.selectDevice(selectedDeviceID);
@@ -415,22 +673,94 @@ void loop()
       showPlayScreen();
       return;
     }
+    
+    // 長押しで戻る
+    // if (M5Dial.BtnA.wasReleaseFor(1000))
+    // {
+    //   M5Dial.Speaker.tone(8000, 50);
+    //   showMenuScreen();
+    //   return;
+    // }
+    
     long newPosition = M5Dial.Encoder.read();
 
     // Select device
+    if (newPosition != oldPosition && newPosition % 4 == 0)
+  {
+    tempDeviceIndex += (newPosition - oldPosition) / 4;
+    if (tempDeviceIndex < 0)
+      tempDeviceIndex = 0;
+    // 変更: lineCountにバックオプションを含める
+    int lineCount = 1 + spClient.deviceIDs.size(); // +1 for Back option
+    if (tempDeviceIndex >= lineCount)
+      tempDeviceIndex = lineCount - 1;
+
+    redrawDeviceScreen(tempDeviceIndex);
+    oldPosition = newPosition;
+  }
+  return;
+  }
+  
+  case StatePlaylistList:
+  {
+    // ボタン押下時の処理
+    if (M5Dial.BtnA.wasReleased())
+    {
+      M5Dial.Speaker.tone(8000, 20);
+      
+      if (tempDeviceIndex == 0) {
+        // 「<< Back」が選択されている場合
+        showMenuScreen();
+        return;
+      }
+      
+      // 通常のプレイリスト選択処理
+      int actualPlaylistIndex = tempDeviceIndex - 1; // Back optionの分を調整
+      if (spClient.playlistIds.size() > 0 && 
+          actualPlaylistIndex >= 0 && 
+          actualPlaylistIndex < spClient.playlistIds.size())
+      {
+        // 選択したプレイリストを保存
+        selectedPlaylistId = spClient.playlistIds[actualPlaylistIndex];
+        
+        // Preferencesに選択を保存
+        preferences.begin("DialPlay");
+        preferences.putString("selPlaylist", selectedPlaylistId);
+        preferences.end();
+        
+        // 選択したプレイリストを再生
+        spClient.playPlaylist(selectedPlaylistId);
+        
+        // 再生画面に戻る
+        delay(100);
+        needFullClear = true;
+        showPlayScreen();
+      }
+      return;
+    }
+    
+    // 長押し処理は削除（「<< Back」オプションで代替）
+    
+    long newPosition = M5Dial.Encoder.read();
+    
+    // プレイリストをスクロール
     if (newPosition != oldPosition && newPosition % 4 == 0)
     {
       tempDeviceIndex += (newPosition - oldPosition) / 4;
       if (tempDeviceIndex < 0)
         tempDeviceIndex = 0;
-      if (tempDeviceIndex >= spClient.deviceIDs.size())
-        tempDeviceIndex = spClient.deviceIDs.size() - 1;
-
-      redrawDeviceScreen(tempDeviceIndex);
+      // 変更: lineCountにバックオプションを含める
+      int lineCount = 1 + spClient.playlistIds.size(); // +1 for Back option
+      if (tempDeviceIndex >= lineCount)
+        tempDeviceIndex = lineCount - 1;
+        
+      redrawPlaylistScreen(tempDeviceIndex);
       oldPosition = newPosition;
     }
     return;
   }
+
+
   }
 }
 
@@ -441,6 +771,7 @@ void resetWiFiAndAuth()
   WiFi.disconnect(false, true);
   preferences.begin("DialPlay");
   preferences.remove("refreshToken");
+  preferences.remove("selPlaylist"); // プレイリスト選択も削除
   preferences.end();
 
   scanWiFi();
@@ -647,7 +978,6 @@ void showPlayScreen()
   {
     refreshMillis = 0;
   }
-  //Display.clear();  // 画面遷移時は全画面クリア
 
   downloadAndDisplayAlbumArt();  // アルバムアートをダウンロード
   previousTrackName = spClient.trackName;
@@ -667,18 +997,14 @@ void redrawPlayScreen()
   if (lastPlayState != spClient.isPlaying || lastVolume != spClient.volume)
   {
     Display.clear();
-    //Display.fillRect(0, 0, screenWidth, 80, BLACK);
     lastPlayState = spClient.isPlaying;
     lastVolume = spClient.volume;
   }
   else
   {
     // スクロールテキストの領域のみクリア
-    //Display.fillRect(20, 154, 200, 50, BLACK);
     Display.fillRect(90, 150, 150, 50, BLACK);
   }
-  //Display.clear();
-  //Display.fillRect(20, 154, 200, 50, BLACK);  // track nameとartist nameの領域のみクリア
   Display.setColor(baseColor);
 
   // Volume
@@ -706,9 +1032,6 @@ void redrawPlayScreen()
   // Album art
   albumArtSprite.pushSprite(&Display, 30, 150);  // 左端に表示
 
-  // Title
-  //Display.drawString(spClient.trackName, screenWidth / 2, 154);
-  //Display.drawString(spClient.artistName, screenWidth / 2, 179);
   // Track name スプライトの更新と描画
   trackNameSprite.clear();
   trackNameSprite.setCursor(trackNameCursorX, 0);
@@ -728,11 +1051,14 @@ void showDeviceScreen()
   screenState = StateDeviceList;
   spClient.getDeviceList();
 
+  tempDeviceIndex = 0;
+
   for (int i = 0; i < spClient.deviceIDs.size(); i++)
   {
     if (spClient.deviceIDs[i] == spClient.deviceID)
     {
-      tempDeviceIndex = i;
+      tempDeviceIndex = i + 1; // +1 for Back option
+      break;
     }
   }
 
@@ -743,31 +1069,50 @@ void showDeviceScreen()
 void redrawDeviceScreen(int selectedLine)
 {
   Display.clear();
-  int lineCount = spClient.deviceIDs.size();
-  if (selectedLine < 0 || selectedLine >= lineCount)
-    return;
+  // int lineCount = spClient.deviceIDs.size();
+  // if (selectedLine < 0 || selectedLine >= lineCount)
+  //   return;
+
+  // Display.fillRect(0, screenHeight / 2 - 12, screenWidth, 24, baseColor);
+
+  int lineCount = 1 + spClient.deviceIDs.size(); // +1 for Back option
+  
+  if (selectedLine < 0) selectedLine = 0;
+  if (selectedLine >= lineCount) selectedLine = lineCount - 1;
 
   Display.fillRect(0, screenHeight / 2 - 12, screenWidth, 24, baseColor);
+
+  
   for (int i = 0; i < lineCount; i++)
   {
     int y = (i - selectedLine) * 30 + screenHeight / 2;
     if (y > 0 && y < screenHeight)
     {
+      String displayText;
+      
+      if (i == 0) {
+        displayText = "<< Back"; // 戻るオプション
+      } else {
+        // i-1で実際のデバイスインデックスを取得
+        displayText = spClient.deviceNames[i-1];
+      }
+      
       if (i == selectedLine)
       {
         Display.setTextColor(BLACK);
-        Display.drawString(spClient.deviceNames[i], screenWidth / 2, y);
+        Display.drawString(displayText, screenWidth / 2, y);
         Display.setTextColor(baseColor);
       }
       else
       {
-        Display.drawString(spClient.deviceNames[i], screenWidth / 2, y);
+        Display.drawString(displayText, screenWidth / 2, y);
       }
     }
   }
+  
+  // 戻るボタンの表示
+  //Display.drawString("Back (long press button)", screenWidth / 2, screenHeight - 20);
 }
-
-
 
 // Send WiFi setting form
 void handleFormWiFi(void)

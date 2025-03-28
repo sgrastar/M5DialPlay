@@ -19,8 +19,15 @@ public:
 
   boolean needsRefresh;
 
-  std::vector <String> deviceIDs;
-  std::vector <String> deviceNames;
+  std::vector<String> deviceIDs;
+  std::vector<String> deviceNames;
+  
+  // 新しいプレイリスト用ベクトル
+  std::vector<String> playlistIds;
+  std::vector<String> playlistNames;
+  std::vector<String> playlistImageURLs;
+  std::vector<int> playlistTrackCounts;  // 各プレイリストの曲数
+
 
   String deviceID;
   boolean isPlaying;
@@ -38,6 +45,10 @@ public:
 
   int getPlaybackState();
   int getDeviceList();
+  
+  // プレイリスト管理用の新機能
+  int getUserPlaylists();
+  int playPlaylist(String playlistId);
 
   int sendPutCommand(String urlString, String payload);
   int sendPostCommand(String urlString, String payload);

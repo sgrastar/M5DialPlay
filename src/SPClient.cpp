@@ -65,7 +65,7 @@ String SPClient::authURLString()
     urlString += "&response_type=code";
     urlString += "&redirect_uri=" + urlEncode(authRedirectURL);
     urlString += "&state=" + urlEncode(authState);
-    urlString += "&scope=user-read-playback-state%20user-modify-playback-state";
+    urlString += "&scope=user-read-playback-state%20user-modify-playback-state%20playlist-read-private%20playlist-read-collaborative";
     urlString += "&code_challenge_method=S256";
     urlString += "&code_challenge=" + SHA256HashInBase64(codeVerifier);
 
@@ -226,6 +226,13 @@ int SPClient::getPlaybackState()
             }
         }
     }
+    else if (result == HTTP_CODE_NO_CONTENT){
+        log_i("No active playback state");
+        
+        // 必要に応じて、デフォルトまたは代替情報を設定
+        trackName = "No track playing";
+        artistName = "Select a playlist to play";
+    }
     else
     {
         log_e("Error: %d", result);
@@ -277,6 +284,94 @@ int SPClient::getDeviceList()
     if (result == 401)
         needsRefresh = true;
     return result;
+}
+
+// Get user playlists
+int SPClient::getUserPlaylists() {
+    playlistIds.clear();
+    playlistNames.clear();
+    playlistImageURLs.clear();
+    playlistTrackCounts.clear();  // 曲数情報を追加
+
+    if (accessToken.isEmpty())
+        return 0;
+
+    httpClient.begin("https://api.spotify.com/v1/me/playlists?limit=50", SpotifyPEM);
+    httpClient.addHeader("Authorization", "Bearer " + accessToken);
+    const char *headerKeys[] = {"Transfer-Encoding"};
+    httpClient.collectHeaders(headerKeys, 1);
+    int result = httpClient.GET();
+    
+    if (result == HTTP_CODE_OK) {
+        boolean chunked = (httpClient.header("Transfer-Encoding") == "chunked");
+        WiFiClient *stream = httpClient.getStreamPtr();
+        JsonStreamScanner scanner = JsonStreamScanner(stream, chunked);
+        
+        String currentPlaylistId = "";
+        String currentPlaylistName = "";
+        String currentPlaylistImageURL = "";
+        int currentTrackCount = 0;
+        
+        while (scanner.available()) {
+            String path = scanner.scanNextKey();
+            
+            if (path == "/items/id") {
+                // 新しいプレイリストの開始
+                if (!currentPlaylistId.isEmpty()) {
+                    // 前のプレイリスト情報があれば保存
+                    playlistIds.push_back(currentPlaylistId);
+                    playlistNames.push_back(currentPlaylistName);
+                    playlistImageURLs.push_back(currentPlaylistImageURL);
+                    playlistTrackCounts.push_back(currentTrackCount);
+                    
+                    // リセット
+                    currentPlaylistImageURL = "";
+                    currentTrackCount = 0;
+                }
+                
+                currentPlaylistId = scanner.scanString();
+                currentPlaylistName = "";  // 新しいプレイリストのためリセット
+            }
+            else if (path == "/items/name") {
+                currentPlaylistName = scanner.scanString();
+            }
+            else if (path == "/items/images/url") {
+                // 最初の画像URLだけを保存（通常は最大サイズの画像）
+                if (currentPlaylistImageURL.isEmpty()) {
+                    currentPlaylistImageURL = scanner.scanString();
+                }
+            }
+            else if (path == "/items/tracks/total") {
+                currentTrackCount = scanner.scanInt();
+            }
+        }
+        
+        // 最後のプレイリスト情報を保存
+        if (!currentPlaylistId.isEmpty()) {
+            playlistIds.push_back(currentPlaylistId);
+            playlistNames.push_back(currentPlaylistName);
+            playlistImageURLs.push_back(currentPlaylistImageURL);
+            playlistTrackCounts.push_back(currentTrackCount);
+        }
+    } else {
+        log_e("Error: %d", result);
+    }
+    
+    httpClient.end();
+    if (result == 401)
+        needsRefresh = true;
+    
+    return result;
+}
+
+// Play a specific playlist
+int SPClient::playPlaylist(String playlistId) {
+    if (accessToken.isEmpty() || playlistId.isEmpty())
+        return 0;
+        
+    // Spotify APIのドキュメントに従って正しいJSONペイロードを構築
+    String payload = "{\"context_uri\":\"spotify:playlist:" + playlistId + "\"}";
+    return sendPutCommand("https://api.spotify.com/v1/me/player/play", payload);
 }
 
 // Send API command using PUT method
