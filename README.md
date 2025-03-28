@@ -13,6 +13,7 @@ Special thanks to @k-natori for creating the cool idea and foundation.
 - [Tutorial Article (Japanese)](https://note.com/njrecalls/n/n5f3e35186f46): Making M5Dial a Spotify Remote Controller
 
 ## Features
+* Play your playlists in Spotify
 * Displays currently playing song title and album artwork
 * Auto-scrolling for long song titles
 
