@@ -368,21 +368,22 @@ void updateScrollingText() {
 // Setup M5Dial
 void setup()
 {
-  //Serial.begin(115200);  // この行を追加
-  //delay(1000);      
-  
   auto cfg = M5.config();
   M5Dial.begin(cfg, true, false);
+  Serial.begin(115200);
+  delay(1000); 
+  Serial.println("\nSetup initiated.");
+
   Display.begin();
-M5Dial.update();
+  M5Dial.update();
 
   // スプライトの初期化
   albumArtSprite.setColorDepth(16);    
-albumArtSprite.createSprite(50, 50);
+  albumArtSprite.createSprite(50, 50);
   
   // プレイリスト画像用スプライトの初期化
   playlistImageSprite.setColorDepth(16);
-playlistImageSprite.createSprite(50, 50);
+  playlistImageSprite.createSprite(50, 50);
 
   trackNameSprite.setColorDepth(8);
   trackNameSprite.setFont(&fonts::lgfxJapanGothic_20);
@@ -403,11 +404,13 @@ playlistImageSprite.createSprite(50, 50);
 
   // Reset if button is pressed when power-on
   if (M5Dial.BtnA.isPressed()) {
+    Serial.println("Button pressed on boot. Resetting WiFi and Auth.");
     resetWiFiAndAuth();
     return;
   }
 
   // Connect if WiFi saved
+  Serial.println("Attempting to connect to saved WiFi...");
   WiFi.mode(WIFI_STA);
   WiFi.begin();
   int timeout = 0;
@@ -418,12 +421,14 @@ playlistImageSprite.createSprite(50, 50);
     timeout++;
     if (timeout > 20) // Timeout. restart from scanWiFi
     {
+      Serial.println("\nWiFi connection timeout. Starting AP mode.");
       scanWiFi();
       startWiFiAP();
       showAPQRcode();
       return;
     }
   }
+  Serial.println("\nWiFi connected.");
 
   // Preferences
   preferences.begin("DialPlay");
@@ -431,8 +436,10 @@ playlistImageSprite.createSprite(50, 50);
   selectedPlaylistId = preferences.getString("selPlaylist"); // 選択されたプレイリストの読み込み
   if (spClient.refreshToken.length())
   {
+    Serial.println("Found refresh token. Attempting to refresh access token...");
     if (spClient.refreshAccessToken() == 200)
     {
+      Serial.println("Access token refreshed successfully.");
       preferences.putString("refreshToken", spClient.refreshToken);
       preferences.end();
       delay(100);
@@ -444,10 +451,12 @@ playlistImageSprite.createSprite(50, 50);
       }
       return;
     }
+    Serial.println("Failed to refresh access token.");
   }
   preferences.end();
 
   // Start web server
+  Serial.println("Starting Web Server for authentication.");
   webServer.onNotFound(handleNotFound);
   webServer.on("/formwifi", HTTP_ANY, handleFormWiFi);
   webServer.on("/postwifi", HTTP_POST, handlePostWiFi);
@@ -456,8 +465,15 @@ playlistImageSprite.createSprite(50, 50);
   webServer.begin();
 
   myIP = WiFi.localIP();
-  mdns_init();
-  MDNS.begin("dialplayredirect");
+  Serial.print("IP Address: ");
+  Serial.println(myIP);
+  
+  if (MDNS.begin("dialplayredirect")) {
+    Serial.println("mDNS responder started: dialplayredirect.local");
+  } else {
+    Serial.println("Error setting up MDNS responder!");
+  }
+  
   spotifyAuthURLString = spClient.authURLString();
   showSpotifyAuthQRcode();
 }
@@ -766,6 +782,7 @@ void loop()
 void resetWiFiAndAuth()
 {
   // Reset
+  Serial.println("Resetting WiFi and Auth data.");
   WiFi.disconnect(false, true);
   preferences.begin("DialPlay");
   preferences.remove("refreshToken");
@@ -781,15 +798,18 @@ void resetWiFiAndAuth()
 void scanWiFi()
 {
   showMessage("Scanning WiFi");
+  Serial.println("Scanning for WiFi networks...");
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   delay(100);
   int count = WiFi.scanNetworks();
+  Serial.printf("%d networks found.\n", count);
   wifiVector.clear();
   for (int i = 0; i < count; i++)
   {
     String ssid = WiFi.SSID(i);
     wifiVector.push_back(ssid);
+    Serial.println(ssid);
   }
   WiFi.scanDelete();
 }
@@ -797,13 +817,16 @@ void scanWiFi()
 // Start access point mode, web server, and DNS server
 void startWiFiAP()
 {
+  Serial.println("Starting Access Point mode...");
   WiFi.disconnect();
   delay(100);
   WiFi.softAP(AP_ssid.c_str(), AP_pass.c_str());
   WiFi.softAPConfig(myAPIP, myAPIP, subnet);
   myIP = WiFi.softAPIP();
+  Serial.printf("AP IP address: %s\n", myIP.toString().c_str());
 
   // Start web server
+  Serial.println("Starting Web Server for WiFi setup.");
   webServer.onNotFound(handleNotFound);
   webServer.on("/formwifi", handleFormWiFi);
   webServer.on("/postwifi", HTTP_POST, handlePostWiFi);
@@ -812,6 +835,7 @@ void startWiFiAP()
   webServer.begin();
 
   // Start DNS
+  Serial.println("Starting DNS Server.");
   dnsServer.start(53, "*", myIP);
 }
 
@@ -842,6 +866,7 @@ void startWiFiST()
 {
   screenState = StateAuthQRcode;
   showMessage("WiFi Switching");
+  Serial.println("Switching to Station mode...");
   dnsServer.stop();
   WiFi.disconnect();
   delay(100);
@@ -855,6 +880,7 @@ void startWiFiST()
     timeout++;
     if (timeout > 20) // Timeout. restart from scanWiFi
     {
+      Serial.println("\nWiFi connection timeout. Starting AP mode.");
       scanWiFi();
       startWiFiAP();
       showAPQRcode();
@@ -864,10 +890,18 @@ void startWiFiST()
 
   // Connected
   showMessage("WiFi ST Connected");
+  Serial.println("\nWiFi ST Connected.");
 
   myIP = WiFi.localIP();
-  mdns_init();
-  MDNS.begin("dialplayredirect");
+  Serial.print("IP Address: ");
+  Serial.println(myIP);
+
+  if (MDNS.begin("dialplayredirect")) {
+    Serial.println("mDNS responder started: dialplayredirect.local");
+  } else {
+    Serial.println("Error setting up MDNS responder!");
+  }
+  
   spotifyAuthURLString = spClient.authURLString();
   showSpotifyAuthQRcode();
 }
@@ -876,10 +910,14 @@ void startWiFiST()
 void showSpotifyAuthQRcode()
 {
   Display.clear();
-  Display.qrcode(spotifyAuthURLString, (screenWidth - qrcodeWidth) / 2, (screenHeight - qrcodeWidth) / 2, qrcodeWidth);
-  Display.drawString("Spotify Auth", (screenWidth) / 2, (screenHeight - qrcodeWidth) / 2 + qrcodeWidth + 10);
+  Display.qrcode(spotifyAuthURLString, (screenWidth - qrcodeWidth) / 2, (screenHeight - qrcodeWidth) / 2 - 10, qrcodeWidth);
+  Display.drawString("Spotify Auth", (screenWidth) / 2, (screenHeight - qrcodeWidth) / 2 + qrcodeWidth);
+  Display.drawString(myIP.toString(), screenWidth / 2, (screenHeight - qrcodeWidth) / 2 + qrcodeWidth + 20);
   screenState = StateAuthQRcode;
   M5Dial.Speaker.tone(8000, 20);
+  Serial.println("Displaying Spotify Auth QR Code.");
+  Serial.print("Auth URL: ");
+  Serial.println(spotifyAuthURLString);
 }
 
 void downloadAndDisplayAlbumArt() {
@@ -1114,6 +1152,7 @@ void redrawDeviceScreen(int selectedLine)
 // Send WiFi setting form
 void handleFormWiFi(void)
 {
+  Serial.println("Serving WiFi form.");
   String optionList = "";
   for (size_t i = 0; i < wifiVector.size(); i++)
   {
@@ -1133,12 +1172,14 @@ void handlePostWiFi(void)
 {
   ST_ssid = webServer.arg("SSID");
   ST_pass = webServer.arg("PASS");
+  Serial.printf("Received WiFi credentials for SSID: %s\n", ST_ssid.c_str());
   showMessage(ST_ssid + "|" + ST_pass);
   startWiFiST();
 }
 
 // Handles CORS preflight requests
 void handleCodeReceiverOptions(void) {
+  Serial.println("Received OPTIONS request for code receiver.");
   webServer.sendHeader("Access-Control-Allow-Origin", "*");
   webServer.sendHeader("Access-Control-Max-Age", "10000");
   webServer.sendHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
@@ -1149,14 +1190,17 @@ void handleCodeReceiverOptions(void) {
 // Receive code from GitHub Pages
 void handleCodeReceiver(void)
 {
+  Serial.println("Received POST request for code receiver.");
   webServer.sendHeader("Access-Control-Allow-Origin", "*");
   String code = webServer.arg("plain");
 
   if (code.length() > 0) {
+    Serial.printf("Received code: %s\n", code.c_str());
     webServer.send(200, "text/plain", "OK");
     showMessage("Received code. Requesting token...");
     
     if (spClient.requestAccessToken(code) == 200) {
+      Serial.println("Successfully obtained access token.");
       preferences.begin("DialPlay");
       preferences.putString("refreshToken", spClient.refreshToken);
       preferences.end();
@@ -1168,11 +1212,13 @@ void handleCodeReceiver(void)
         showDeviceScreen();
       }
     } else {
+      Serial.println("Error: Failed to obtain access token from Spotify.");
       showMessage("Auth Error");
       delay(3000);
       showSpotifyAuthQRcode();
     }
   } else {
+    Serial.println("Error: POST request did not contain a code.");
     webServer.send(400, "text/plain", "Bad Request");
   }
 }
@@ -1181,6 +1227,7 @@ void handleCodeReceiver(void)
 // Send WiFi input form as captive portal
 void handleNotFound(void)
 {
+  Serial.printf("handleNotFound: screenState=%d\n", screenState);
   if (screenState == StateAPQRcode)
   {
     String urlString = "http://" + String(myIP[0]) + "." + String(myIP[1]) + "." + String(myIP[2]) + "." + String(myIP[3]) + "/formwifi";
