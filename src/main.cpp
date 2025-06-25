@@ -124,6 +124,7 @@ void updateScrollingText();
 void downloadAndDisplayAlbumArt();
 void downloadAndDisplayPlaylistImage(String imageURL);
 
+void handleRootGet(void);
 void handleFormWiFi(void);
 void handlePostWiFi(void);
 void handleCodeReceiverOptions(void);
@@ -460,6 +461,7 @@ void setup()
   webServer.onNotFound(handleNotFound);
   webServer.on("/formwifi", HTTP_ANY, handleFormWiFi);
   webServer.on("/postwifi", HTTP_POST, handlePostWiFi);
+  webServer.on("/", HTTP_GET, handleRootGet);
   webServer.on("/", HTTP_OPTIONS, handleCodeReceiverOptions);
   webServer.on("/", HTTP_POST, handleCodeReceiver);
   webServer.begin();
@@ -830,6 +832,7 @@ void startWiFiAP()
   webServer.onNotFound(handleNotFound);
   webServer.on("/formwifi", handleFormWiFi);
   webServer.on("/postwifi", HTTP_POST, handlePostWiFi);
+  webServer.on("/", HTTP_GET, handleRootGet);
   webServer.on("/", HTTP_OPTIONS, handleCodeReceiverOptions);
   webServer.on("/", HTTP_POST, handleCodeReceiver);
   webServer.begin();
@@ -1168,7 +1171,20 @@ void handleFormWiFi(void)
 }
 
 // Receive POST content to /formwifi
-void handlePostWiFi(void){ST_ssid = webServer.arg("SSID");ST_pass = webServer.arg("PASS");Serial.printf("Received WiFi credentials for SSID: %s\n", ST_ssid.c_str());showMessage(ST_ssid + "|" + ST_pass);startWiFiST();}// Handler for GET requests to the root URLvoid handleRootGet(void){Serial.println("Received GET request for root. Sending OK.");webServer.send(200, "text/plain", "M5Dial server is running. Ready to receive auth code.");}
+void handlePostWiFi(void)
+{
+  ST_ssid = webServer.arg("SSID");
+  ST_pass = webServer.arg("PASS");
+  Serial.printf("Received WiFi credentials for SSID: %s\n", ST_ssid.c_str());
+  showMessage(ST_ssid + "|" + ST_pass);
+  startWiFiST();
+}
+
+// Handler for GET requests to the root URL
+void handleRootGet(void) {
+  Serial.println("Received GET request for root. Sending OK.");
+  webServer.send(200, "text/plain", "M5Dial server is running. Ready to receive auth code.");
+}
 
 // Handles CORS preflight requests
 void handleCodeReceiverOptions(void) {
