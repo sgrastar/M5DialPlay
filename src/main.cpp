@@ -62,8 +62,6 @@ String ST_pass;
 // URL and paths
 String spotifyAuthURLString;
 #define formPath "/formwifi"
-#define authStartPath "/authstart"
-#define authRedirectPath "/authredirected"
 
 // Screen
 M5GFX Display;
@@ -112,7 +110,7 @@ void startWiFiAP();
 void showAPQRcode();
 void showAPFormQRcode();
 void startWiFiST();
-void showAuthQRcode();
+void showSpotifyAuthQRcode();
 
 void showPlayScreen();
 void redrawPlayScreen();
@@ -128,8 +126,8 @@ void downloadAndDisplayPlaylistImage(String imageURL);
 
 void handleFormWiFi(void);
 void handlePostWiFi(void);
-void handleAuthStart(void);
-void handleAuthRedirected(void);
+void handleCodeReceiverOptions(void);
+void handleCodeReceiver(void);
 void handleNotFound(void);
 
 void showMessage(String message);
@@ -282,7 +280,7 @@ void downloadAndDisplayPlaylistImage(String imageURL) {
                   // 画像描画失敗時はプレースホルダーを表示
                   playlistImageSprite.fillRect(0, 0, 50, 50, baseColor);
                   playlistImageSprite.setTextColor(BLACK);
-                  playlistImageSprite.drawString("?", 25, 25);
+                  playlistImageSprite.drawString("", 25, 25);
               }
               free(buffer);
           } else {
@@ -376,15 +374,15 @@ void setup()
   auto cfg = M5.config();
   M5Dial.begin(cfg, true, false);
   Display.begin();
-  M5Dial.update();
+M5Dial.update();
 
   // スプライトの初期化
   albumArtSprite.setColorDepth(16);    
-  albumArtSprite.createSprite(50, 50);
+albumArtSprite.createSprite(50, 50);
   
   // プレイリスト画像用スプライトの初期化
   playlistImageSprite.setColorDepth(16);
-  playlistImageSprite.createSprite(50, 50);
+playlistImageSprite.createSprite(50, 50);
 
   trackNameSprite.setColorDepth(8);
   trackNameSprite.setFont(&fonts::lgfxJapanGothic_20);
@@ -453,15 +451,15 @@ void setup()
   webServer.onNotFound(handleNotFound);
   webServer.on("/formwifi", HTTP_ANY, handleFormWiFi);
   webServer.on("/postwifi", HTTP_POST, handlePostWiFi);
-  webServer.on("/authstart", handleAuthStart);
-  webServer.on("/authredirected", handleAuthRedirected);
+  webServer.on("/", HTTP_OPTIONS, handleCodeReceiverOptions);
+  webServer.on("/", HTTP_POST, handleCodeReceiver);
   webServer.begin();
 
   myIP = WiFi.localIP();
   mdns_init();
   MDNS.begin("dialplayredirect");
   spotifyAuthURLString = spClient.authURLString();
-  showAuthQRcode();
+  showSpotifyAuthQRcode();
 }
 
 // Main loop M5Dial
@@ -492,7 +490,7 @@ void loop()
       }
       if (spClient.accessToken.isEmpty())
       {
-        showAuthQRcode();
+        showSpotifyAuthQRcode();
       }
       return;
     }
@@ -809,8 +807,8 @@ void startWiFiAP()
   webServer.onNotFound(handleNotFound);
   webServer.on("/formwifi", handleFormWiFi);
   webServer.on("/postwifi", HTTP_POST, handlePostWiFi);
-  webServer.on("/authstart", handleAuthStart);
-  webServer.on("/authredirected", handleAuthRedirected);
+  webServer.on("/", HTTP_OPTIONS, handleCodeReceiverOptions);
+  webServer.on("/", HTTP_POST, handleCodeReceiver);
   webServer.begin();
 
   // Start DNS
@@ -831,7 +829,7 @@ void showAPQRcode()
 // Show QR code for form URL (not used when captive portal detected)
 void showAPFormQRcode()
 {
-  String urlString = "http://" + String(myIP[0]) + "." + String(myIP[1]) + "." + String(myIP[2]) + "." + String(myIP[3]) + "/authstart";
+  String urlString = "http://" + String(myIP[0]) + "." + String(myIP[1]) + "." + String(myIP[2]) + "." + String(myIP[3]) + "/formwifi";
   Display.clear();
   Display.qrcode(urlString, (screenWidth - qrcodeWidth) / 2, (screenHeight - qrcodeWidth) / 2, qrcodeWidth);
   Display.drawString("Scan IP", (screenWidth) / 2, (screenHeight - qrcodeWidth) / 2 + qrcodeWidth + 10);
@@ -871,15 +869,14 @@ void startWiFiST()
   mdns_init();
   MDNS.begin("dialplayredirect");
   spotifyAuthURLString = spClient.authURLString();
-  showAuthQRcode();
+  showSpotifyAuthQRcode();
 }
 
 // Show QR code to redirect smartphone browser to Spotify authorization URL
-void showAuthQRcode()
+void showSpotifyAuthQRcode()
 {
-  String urlString = "http://" + String(myIP[0]) + "." + String(myIP[1]) + "." + String(myIP[2]) + "." + String(myIP[3]) + authStartPath;
   Display.clear();
-  Display.qrcode(urlString, (screenWidth - qrcodeWidth) / 2, (screenHeight - qrcodeWidth) / 2, qrcodeWidth);
+  Display.qrcode(spotifyAuthURLString, (screenWidth - qrcodeWidth) / 2, (screenHeight - qrcodeWidth) / 2, qrcodeWidth);
   Display.drawString("Spotify Auth", (screenWidth) / 2, (screenHeight - qrcodeWidth) / 2 + qrcodeWidth + 10);
   screenState = StateAuthQRcode;
   M5Dial.Speaker.tone(8000, 20);
@@ -1140,39 +1137,46 @@ void handlePostWiFi(void)
   startWiFiST();
 }
 
-// Redirect to Spotify authentication URL
-void handleAuthStart(void)
-{
-  if (spotifyAuthURLString.length() > 0)
-  {
-    webServer.sendHeader("Location", spotifyAuthURLString);
-    webServer.send(302, "text/plain", "Found.");
-    return;
-  }
-  webServer.send(404, "text/plain", "No Auth URL");
+// Handles CORS preflight requests
+void handleCodeReceiverOptions(void) {
+  webServer.sendHeader("Access-Control-Allow-Origin", "*");
+  webServer.sendHeader("Access-Control-Max-Age", "10000");
+  webServer.sendHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+  webServer.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  webServer.send(204);
 }
 
-// Receive redirect from Spotify authentication
-void handleAuthRedirected(void)
+// Receive code from GitHub Pages
+void handleCodeReceiver(void)
 {
-  String code = webServer.arg("code");
-  String state = webServer.arg("state");
+  webServer.sendHeader("Access-Control-Allow-Origin", "*");
+  String code = webServer.arg("plain");
 
-  webServer.send(200, "text/html", autoCloseHtml);
-  webServer.stop();
-  MDNS.end();
-  spClient.requestAccessToken(code);
-  preferences.begin("DialPlay");
-  preferences.putString("refreshToken", spClient.refreshToken);
-  preferences.end();
+  if (code.length() > 0) {
+    webServer.send(200, "text/plain", "OK");
+    showMessage("Received code. Requesting token...");
+    
+    if (spClient.requestAccessToken(code) == 200) {
+      preferences.begin("DialPlay");
+      preferences.putString("refreshToken", spClient.refreshToken);
+      preferences.end();
 
-  needFullClear = true;
-  showPlayScreen();
-  if (spClient.trackName.isEmpty())
-  {
-    showDeviceScreen();
+      needFullClear = true;
+      showPlayScreen();
+      if (spClient.trackName.isEmpty())
+      {
+        showDeviceScreen();
+      }
+    } else {
+      showMessage("Auth Error");
+      delay(3000);
+      showSpotifyAuthQRcode();
+    }
+  } else {
+    webServer.send(400, "text/plain", "Bad Request");
   }
 }
+
 
 // Send WiFi input form as captive portal
 void handleNotFound(void)

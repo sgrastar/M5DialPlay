@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spotify Redirect</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #f0f0f0;
+      color: #333;
+    }
+    .container {
+      text-align: center;
+      padding: 2em;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    h1 {
+      font-size: 1.5em;
+    }
+    p {
+      font-size: 1em;
+      margin-top: 1em;
+    }
+    .status {
+      font-weight: bold;
+    }
+    .error {
+      color: #d93025;
+    }
+    .success {
+      color: #1e8e3e;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Spotify Authentication</h1>
+    <p>Processing authentication, please wait...</p>
+    <p class="status" id="status"></p>
+  </div>
+
+  <script>
+    const setStatus = (message, isError = false) => {
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = message;
+      statusEl.className = 'status ' + (isError ? 'error' : 'success');
+    };
+
+    window.onload = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+
+      if (!code) {
+        setStatus('Error: Authorization code not found in URL.', true);
+        return;
+      }
+
+      setStatus('Code received. Sending to device...');
+
+      try {
+        const response = await fetch('http://dialplayredirect.local/', {
+          method: 'POST',
+          mode: 'no-cors', // Important for local network requests from HTTPS page
+          headers: {
+            'Content-Type': 'text/plain'
+          },
+          body: code
+        });
+        
+        // no-cors mode means we cannot inspect the response, but we assume it's ok
+        setStatus('Successfully sent to device! You can now close this window.');
+
+      } catch (error) {
+        console.error('Error sending code to device:', error);
+        setStatus('Error: Could not send code to device. Make sure you are on the same Wi-Fi network as your M5Dial.', true);
+      }
+    };
+  </script>
+</body>
+</html>
