@@ -1168,14 +1168,7 @@ void handleFormWiFi(void)
 }
 
 // Receive POST content to /formwifi
-void handlePostWiFi(void)
-{
-  ST_ssid = webServer.arg("SSID");
-  ST_pass = webServer.arg("PASS");
-  Serial.printf("Received WiFi credentials for SSID: %s\n", ST_ssid.c_str());
-  showMessage(ST_ssid + "|" + ST_pass);
-  startWiFiST();
-}
+void handlePostWiFi(void){ST_ssid = webServer.arg("SSID");ST_pass = webServer.arg("PASS");Serial.printf("Received WiFi credentials for SSID: %s\n", ST_ssid.c_str());showMessage(ST_ssid + "|" + ST_pass);startWiFiST();}// Handler for GET requests to the root URLvoid handleRootGet(void){Serial.println("Received GET request for root. Sending OK.");webServer.send(200, "text/plain", "M5Dial server is running. Ready to receive auth code.");}
 
 // Handles CORS preflight requests
 void handleCodeReceiverOptions(void) {
