@@ -472,11 +472,12 @@ void setup()
   Serial.print("IP Address: ");
   Serial.println(myIP);
   
-  if (MDNS.begin("dialplayredirect")) {
-    Serial.println("mDNS responder started: dialplayredirect.local");
-  } else {
+  if (!MDNS.begin("dialplayredirect")) {
     Serial.println("Error setting up MDNS responder!");
+    showMessage("mDNS Error! Check WiFi AP Isolation settings.", true);
+    while(1) { delay(1000); } // Stop execution
   }
+  Serial.println("mDNS responder started: dialplayredirect.local");
   
   spotifyAuthURLString = spClient.authURLString();
   showSpotifyAuthQRcode();
@@ -927,24 +928,24 @@ void showSpotifyAuthQRcode()
 }
 
 void downloadAndDisplayAlbumArt() {
-  //log_e("--- Start downloadAndDisplayAlbumArt ---");
-  //log_e("Current URL: %s", currentImageURL.c_str());
-  //log_e("New URL: %s", spClient.imageURL.c_str());
+  Serial.println("--- Start downloadAndDisplayAlbumArt ---");
+  Serial.printf("Current URL: %s\n", currentImageURL.c_str());
+  Serial.printf("New URL from spClient: %s\n", spClient.imageURL.c_str());
 
   if (currentImageURL == spClient.imageURL) {
-    //log_e("Same image URL, skipping download");
+    Serial.println("Same image URL, skipping download.");
     return;
   }
 
   if (spClient.imageURL.isEmpty()) {
-    //log_e("Image URL is empty, clearing sprite");
+    Serial.println("Image URL is empty, clearing sprite.");
     albumArtSprite.fillScreen(BLACK);
     currentImageURL = "";
     return;
   }
 
   currentImageURL = spClient.imageURL;
-  //log_e("Starting HTTP request...");
+  Serial.println("Starting HTTP request for new image...");
 
   HTTPClient http;
   http.setTimeout(10000);  // タイムアウトを10秒に設定
@@ -954,43 +955,38 @@ void downloadAndDisplayAlbumArt() {
   http.addHeader("User-Agent", "ESP32/M5Dial");
   
   int httpCode = http.GET();
-  //log_e("HTTP response code: %d", httpCode);
+  Serial.printf("HTTP response code: %d\n", httpCode);
 
   if (httpCode == HTTP_CODE_OK) {
     WiFiClient *stream = http.getStreamPtr();
     size_t size = http.getSize();
-    //log_e("Image size: %d bytes", size);
+    Serial.printf("Image size: %d bytes\n", size);
     
     if (size > 0) {
-      //log_e("Drawing image to sprite...");
+      Serial.println("Drawing image to sprite...");
       albumArtSprite.fillScreen(BLACK);  // スプライトをクリア
 
       // 画像データをメモリにバッファ
       uint8_t *buffer = (uint8_t *)malloc(size);
       if (buffer) {
         size_t bytesRead = stream->readBytes(buffer, size);
-        //log_e("Bytes read to buffer: %d", bytesRead);
+        Serial.printf("Bytes read to buffer: %d\n", bytesRead);
         
         // バッファからスプライトに描画
         bool success = albumArtSprite.drawJpg(buffer, bytesRead);
-        //log_e("Draw result: %s", success ? "success" : "failed");
+        Serial.printf("Draw result: %s\n", success ? "success" : "failed");
         free(buffer);
       } else {
-        //log_e("Failed to allocate buffer");
+        Serial.println("Failed to allocate buffer for image.");
       }
-      
-      //log_e("Sprite properties - width: %d, height: %d, colorDepth: %d", 
-      //     albumArtSprite.width(), 
-      //     albumArtSprite.height(),
-      //     albumArtSprite.getColorDepth());
     } else {
-      //log_e("Image size is 0");
+      Serial.println("Image size is 0.");
     }
   } else {
-    //log_e("HTTP GET failed, error: %s", http.errorToString(httpCode).c_str());
+    Serial.printf("HTTP GET failed, error: %s\n", http.errorToString(httpCode).c_str());
   }
   http.end();
-  //log_e("--- End downloadAndDisplayAlbumArt ---");
+  Serial.println("--- End downloadAndDisplayAlbumArt ---");
 }
 
 // Get status and show player screen

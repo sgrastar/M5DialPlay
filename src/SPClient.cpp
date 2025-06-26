@@ -223,6 +223,7 @@ int SPClient::getPlaybackState()
             else if (path == "/item/album/images/url")
             {
                 imageURL = scanner.scanString();
+                log_e("Image URL from API: %s", imageURL.c_str());
             }
         }
     }
