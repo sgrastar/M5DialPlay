@@ -125,6 +125,7 @@ void downloadAndDisplayAlbumArt();
 void downloadAndDisplayPlaylistImage(String imageURL);
 
 void handleRootGet(void);
+void handleIntermediate(void);
 void handleFormWiFi(void);
 void handlePostWiFi(void);
 void handleCodeReceiverOptions(void);
