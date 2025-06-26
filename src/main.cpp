@@ -802,7 +802,7 @@ void resetWiFiAndAuth()
 // Scan WiFi access points
 void scanWiFi()
 {
-  showMessage("Scanning WiFi");
+  showMessage("Scanning WiFi", false);
   Serial.println("Scanning for WiFi networks...");
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
@@ -872,7 +872,7 @@ void showAPFormQRcode()
 void startWiFiST()
 {
   screenState = StateAuthQRcode;
-  showMessage("WiFi Switching");
+  showMessage("WiFi Switching", false);
   Serial.println("Switching to Station mode...");
   dnsServer.stop();
   WiFi.disconnect();
@@ -896,7 +896,7 @@ void startWiFiST()
   }
 
   // Connected
-  showMessage("WiFi ST Connected");
+  showMessage("WiFi ST Connected", false);
   Serial.println("\nWiFi ST Connected.");
 
   myIP = WiFi.localIP();
@@ -1175,7 +1175,7 @@ void handlePostWiFi(void)
   ST_ssid = webServer.arg("SSID");
   ST_pass = webServer.arg("PASS");
   Serial.printf("Received WiFi credentials for SSID: %s\n", ST_ssid.c_str());
-  showMessage(ST_ssid + "|" + ST_pass);
+  showMessage(ST_ssid + "|" + ST_pass, false);
   startWiFiST();
 }
 
@@ -1252,7 +1252,7 @@ void handleCodeReceiver(void)
   if (code.length() > 0) {
     Serial.printf("Received code: %s\n", code.c_str());
     webServer.send(200, "text/plain", "OK");
-    showMessage("Received code. Requesting token...");
+    showMessage("Received code. Requesting token...", false);
     
     if (spClient.requestAccessToken(code) == 200) {
       Serial.println("Successfully obtained access token.");
@@ -1268,7 +1268,7 @@ void handleCodeReceiver(void)
       }
     } else {
       Serial.println("Error: Failed to obtain access token from Spotify.");
-      showMessage("Auth Error");
+      showMessage("Auth Error", true);
       delay(3000);
       showSpotifyAuthQRcode();
     }
@@ -1294,8 +1294,14 @@ void handleNotFound(void)
 }
 
 // Show text on screen
-void showMessage(String message)
+void showMessage(String message, bool isError)
 {
   Display.clear();
+  if (isError) {
+    Display.setTextColor(RED);
+  } else {
+    Display.setTextColor(baseColor);
+  }
   Display.drawString(message, screenWidth / 2, screenHeight / 2);
+  Display.setTextColor(baseColor); // Reset color
 }
