@@ -132,7 +132,7 @@ void handleCodeReceiverOptions(void);
 void handleCodeReceiver(void);
 void handleNotFound(void);
 
-void showMessage(String message);
+void showMessage(String message, bool isError = false);
 
 // Function to show the menu screen
 void showMenuScreen() {
