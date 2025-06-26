@@ -461,6 +461,7 @@ void setup()
   webServer.onNotFound(handleNotFound);
   webServer.on("/formwifi", HTTP_ANY, handleFormWiFi);
   webServer.on("/postwifi", HTTP_POST, handlePostWiFi);
+  webServer.on("/intermediate", HTTP_GET, handleIntermediate);
   webServer.on("/", HTTP_GET, handleRootGet);
   webServer.on("/", HTTP_OPTIONS, handleCodeReceiverOptions);
   webServer.on("/", HTTP_POST, handleCodeReceiver);
@@ -832,6 +833,7 @@ void startWiFiAP()
   webServer.onNotFound(handleNotFound);
   webServer.on("/formwifi", handleFormWiFi);
   webServer.on("/postwifi", HTTP_POST, handlePostWiFi);
+  webServer.on("/intermediate", HTTP_GET, handleIntermediate);
   webServer.on("/", HTTP_GET, handleRootGet);
   webServer.on("/", HTTP_OPTIONS, handleCodeReceiverOptions);
   webServer.on("/", HTTP_POST, handleCodeReceiver);
