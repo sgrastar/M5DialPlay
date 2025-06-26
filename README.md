@@ -1,5 +1,13 @@
 # M5DialPlay
 
+## ⚠️ Spotify API Limitations
+
+Due to Spotify's API policy changes (effective May 15, 2025),
+extended quota mode is only available to organizations with 250k+ MAUs.
+
+This project operates in development mode with a 25-user limit.
+For unlimited usage, users need to create their own Spotify app.
+
 <img src="https://github.com/user-attachments/assets/9fb8d673-4be0-4fc7-b8dd-b5233e985ce2" height="600px">
 
 A Spotify Remote Controller using [M5Dial](https://docs.m5stack.com/en/core/M5Dial)
