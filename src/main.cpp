@@ -1180,6 +1180,53 @@ void handlePostWiFi(void)
   startWiFiST();
 }
 
+const char intermediate_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+  <title>M5Dial Auth</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: sans-serif; text-align: center; padding-top: 40px; }
+  </style>
+</head>
+<body>
+  <h1>Authentication successful</h1>
+  <p id="status">Sending code to device...</p>
+  <script>
+    window.onload = () => {
+      const statusEl = document.getElementById('status');
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      if (!code) {
+        statusEl.innerText = 'Error: Code not found.';
+        return;
+      }
+      fetch('/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: code
+      }).then(res => {
+        if (res.ok) {
+          statusEl.innerText = 'Success! You can close this window now.';
+          setTimeout(() => window.close(), 1500);
+        } else {
+          statusEl.innerText = 'Error: Failed to send code to the device.';
+        }
+      }).catch(err => {
+        statusEl.innerText = 'Error: Could not connect to the device.';
+      });
+    };
+  </script>
+</body>
+</html>
+)rawliteral";
+
+void handleIntermediate(void) {
+  Serial.println("Serving intermediate page.");
+  webServer.send_P(200, "text/html", intermediate_html);
+}
+
 // Handler for GET requests to the root URL
 void handleRootGet(void) {
   Serial.println("Received GET request for root. Sending OK.");
